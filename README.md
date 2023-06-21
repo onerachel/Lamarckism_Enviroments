@@ -15,11 +15,11 @@ Steps to install:
 1. git clone https://github.com/ci-group/revolve2 --branch v0.3.8-beta1
 2. cd revolve2
 3. git clone git@github.com:onerachel/Lamarckism_Enviroments.git
-2. cd ..
-3. virtualenv -p=python3.8 .venv
-4. source .venv/bin/activate
-5. ./dev_requirements.sh
+4. virtualenv .venv
+5. source .venv/bin/activate
+6. ./dev_requirements.sh (first comment out "pip install -e ./runners/isaacgym[dev] && \")
 ``` 
+In case you have installation errors wrt multineat, find where the cereal library is installed, e.g.: find / -name "cereal*", then tell CPPNWIN where to look for cereal manually, e.g.: export CPATH=/usr/local/include
 
 ## Run experiments 
 To run experiments, e.g. lamarckian_point_navigation:

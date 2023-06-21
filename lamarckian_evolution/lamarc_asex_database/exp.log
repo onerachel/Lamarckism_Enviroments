@@ -1,0 +1,7 @@
+[2023-06-20 16:16:37,895] [INFO] [optimize] Starting moprhology optimization
+[2023-06-20 16:16:37,895] [INFO] [_optimizer] Evaluating initial population of morphologies
+[2023-06-20 16:16:37,898] [INFO] [optimizer] Starting optimization of the controller for morphology num: 0
+[2023-06-20 16:16:37,898] [INFO] [optimizer] Morphology num 0 has no active hinges
+[2023-06-20 16:16:37,918] [INFO] [optimizer] Starting optimization of the controller for morphology num: 1
+[2023-06-20 16:16:37,921] [INFO] [optimize] Starting controller optimization process..
+[2023-06-20 16:16:38,044] [INFO] [runner_mujoco] Starting simulation batch with mujoco.

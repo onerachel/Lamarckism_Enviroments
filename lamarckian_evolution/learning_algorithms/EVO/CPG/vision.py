@@ -4,14 +4,17 @@ import logging
 import numpy as np
 import os
 
+
 class Config:
-    opengl_lib = "egl"
+    # on mac, choose GLFW, on linux, choose EGL
+    opengl_lib = "GLFW"
 
 
 class OpenGLVision:
     max_width, max_height = 20000000, 20000000
     global_context = None
 
+# set shape 3*2 or 10 *10 pixels (with 3 neurons is already 300 neurons input)
     def __init__(self, model: mujoco.MjModel, shape: Tuple[int, int], headless: bool):
         # if OpenGLVision.global_context is None:
         if OpenGLVision.global_context is None and headless:
