@@ -3,6 +3,8 @@ We tested Lamarckism both in the real world and in a mujoco based wrapper called
 
 Parameters used in the experiments are:
 ``` 
+ENVIRONMENT = "FLAT" or "RUGGED" # type of environment
+CHANGE_FREQUENCY = 0 or 2 or 5 # environment changing frequency in an evoulutionary run
 pop_size=50,
 offspring_size=25,
 nr_generations=30,
@@ -12,8 +14,8 @@ learning_trials=280
 ## Installation 
 Steps to install:
 ``` 
-1. git clone https://github.com/onerachel/Lamarckism_Enviroments.git
-2. cd Lamarckism_Enviroments
+1. git clone https://github.com/onerachel/Lamarckism_Environments.git
+2. cd Lamarckism_Environments
 3. virtualenv -p=python3.8 .venv
 4. source .venv/bin/activate
 5. ./dev_requirements.sh
