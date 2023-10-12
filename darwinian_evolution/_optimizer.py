@@ -17,7 +17,6 @@ from sqlalchemy import Column, Integer, String, Float
 from revolve2.core.optimization.ea.generic_ea._database import (
     DbBase,
     DbEAOptimizer,
-    DbEAOptimizerGeneration,
     DbEAOptimizerParent,
     DbEAOptimizerState,
 )
@@ -364,10 +363,9 @@ class EAOptimizer(Process, Generic[Genotype, Fitness]):
         # evaluate initial population if required
         if self.__latest_fitnesses is None:
             logging.info("Evaluating initial population of morphologies")
-            initial_fitnesses, new_genotypes, = await self.__safe_evaluate_generation(
+            initial_fitnesses, new_genotypes = await self.__safe_evaluate_generation(
                 [i.genotype for i in self.__latest_population],
-                self.__database,
-                self.__db_id,
+                [],
             )
             self.__latest_fitnesses = initial_fitnesses
             initial_population = self.__latest_population
@@ -407,24 +405,30 @@ class EAOptimizer(Process, Generic[Genotype, Fitness]):
                 for s in parent_selections
             ]
 
+            # let user select survivors from old individuals
+            old_survivors = self.__safe_select_survivors(
+                [i.genotype for i in self.__latest_population],
+                self.__latest_fitnesses[1],
+                len(self.__latest_population) - self.__offspring_size,
+            )
+
+            old_genotypes = [self.__latest_population[i].genotype for i in old_survivors]
+
             # let user evaluate offspring
             new_fitnesses, new_genotypes = await self.__safe_evaluate_generation(
                 offspring,
-                self.__database,
-                self.__db_id
+                old_genotypes,
             )
 
-            # create individuals with learned controllers
+            # create individuals with original and learned controllers
             new_learned_individuals = [
                 _Individual(
                     -1,  # placeholder until later
                     genotype,
                     [self.__latest_population[i].id for i in parent_indices],
                 )
-                for parent_indices, genotype in zip(parent_selections, new_genotypes)
+                for parent_indices, genotype in zip(parent_selections, new_genotypes[:self.__offspring_size])
             ]
-
-            # create individuals with original controllers
             new_individuals = [
                 _Individual(
                     -1,  # placeholder until later
@@ -433,27 +437,33 @@ class EAOptimizer(Process, Generic[Genotype, Fitness]):
                 )
                 for parent_indices, genotype in zip(parent_selections, offspring)
             ]
-
-            # let user select survivors between old and new individuals
-            old_survivors = self.__safe_select_survivors(
-                [i.genotype for i in self.__latest_population],
-                self.__latest_fitnesses[1],
-                len(self.__latest_population) - self.__offspring_size,
-            )
+            if len(new_genotypes) == len(self.__latest_population):
+                new_learned_individuals = new_learned_individuals + [
+                    _Individual(
+                        -1,  # placeholder until later
+                        genotype,
+                        [parent_id, -1],
+                    )
+                    for parent_id, genotype in zip([self.__latest_population[i].id for i in old_survivors], new_genotypes[self.__offspring_size:])
+                ]
 
             # set ids for new individuals
-            for (individual, learned_individual) in zip(new_individuals, new_learned_individuals):
+            for (individual, learned_individual) in zip(new_individuals, new_learned_individuals[:self.__offspring_size]):
                 id = self.__gen_next_individual_id()
                 individual.id = id
                 learned_individual.id = id
 
-            # combine old and new and store as the new generation
-            self.__latest_population = [
-                self.__latest_population[i] for i in old_survivors
-            ] + new_individuals
+            for individual in new_learned_individuals[self.__offspring_size:]:
+                id = self.__gen_next_individual_id()
+                individual.id = id
 
-            self.__latest_fitnesses = [[self.__latest_fitnesses[0][i] for i in old_survivors] + new_fitnesses[0],
-                                        [self.__latest_fitnesses[1][i] for i in old_survivors] + new_fitnesses[1]]
+            # combine old and new and store as the new generation
+            self.__latest_population =  new_individuals + [self.__latest_population[i] for i in old_survivors]
+            if len(new_genotypes) == len(self.__latest_population):
+                self.__latest_fitnesses = [new_fitnesses[0], new_fitnesses[1]]
+            else:
+                self.__latest_fitnesses = [new_fitnesses[0] + [self.__latest_fitnesses[0][i] for i in old_survivors],
+                                            new_fitnesses[1] + [self.__latest_fitnesses[1][i] for i in old_survivors]]
 
             # save generation and possibly fitnesses of initial population
             # and let user save their state
@@ -496,24 +506,20 @@ class EAOptimizer(Process, Generic[Genotype, Fitness]):
     async def __safe_evaluate_generation(
         self,
         genotypes: List[Genotype],
-        database: AsyncEngine,
-        db_id: DbId
+        old_genotypes: List[Genotype],
     ) -> Tuple[List[Fitness], List[Genotype], List[Fitness]]:
         fitnesses, new_genotypes = await self._evaluate_generation(
             genotypes=genotypes,
-            database=database,
-            db_id=db_id
+            old_genotypes=old_genotypes,
+            num_generation=self.generation_index
         )
         starting_fitnesses = fitnesses[0]
         final_fitnesses = fitnesses[1]
         assert type(final_fitnesses) == list
-        assert len(final_fitnesses) == len(genotypes)
         assert all(type(e) == self.__fitness_type for e in final_fitnesses)
         assert type(new_genotypes) == list
-        assert len(new_genotypes) == len(genotypes)
         assert all(type(e) == self.__genotype_type for e in new_genotypes)
         assert type(starting_fitnesses) == list
-        assert len(starting_fitnesses) == len(genotypes)
         assert all(type(e) == self.__fitness_type for e in starting_fitnesses)
         return (starting_fitnesses, final_fitnesses), new_genotypes
 
@@ -711,6 +717,7 @@ class EAOptimizer(Process, Generic[Genotype, Fitness]):
                     generation_index=self.__generation_index,
                     individual_index=index,
                     individual_id=individual.id,
+                    fitness=self.__latest_fitnesses[1][index]
                 )
                 for index, individual in enumerate(self.__latest_population)
             ]
@@ -760,3 +767,13 @@ class DbEAOptimizerIndividual(DbBase):
     rel_num_bricks = Column(Float, nullable=False)
     rel_num_hinges = Column(Float, nullable=False)
     
+class DbEAOptimizerGeneration(DbBase):
+    """A single generation."""
+
+    __tablename__ = "ea_random_optimizer_generation"
+
+    ea_optimizer_id = Column(Integer, nullable=False, primary_key=True)
+    generation_index = Column(Integer, nullable=False, primary_key=True)
+    individual_index = Column(Integer, nullable=False, primary_key=True)
+    individual_id = Column(Integer, nullable=False)
+    fitness = Column(Float, nullable=False)

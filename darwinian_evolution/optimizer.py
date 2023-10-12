@@ -20,29 +20,22 @@ from revolve2.core.optimization import DbId
 from _optimizer import EAOptimizer
 from revolve2.core.physics.running import (
     ActorState,
-    Batch,
-    Environment,
-    PosedActor,
     Runner,
 )
 from revolve2.core.modular_robot.brains import (
     BrainCpgNetworkStatic, make_cpg_network_structure_neighbour)
 from learning_algorithms.EVO.CPG.optimize import main as learn_controller
+from rerun_robot import main as rerun_robot
 from revolve2.runners.mujoco import LocalRunner
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio.session import AsyncSession
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.future import select
-import asyncio
 from revolve2.genotypes.cppnwin.modular_robot.body_genotype_v1 import (
     develop_v1 as body_develop,)
-
-from revolve2.core.modular_robot import Body, Brain
-from learning_algorithms.EVO.CPG.optimizer import Optimizer as ControllerOptimizer
-from revolve2.core.physics.environment_actor_controller import (
-    EnvironmentActorController,
-)
 import logging
+import learning_algorithms.EVO.CPG.terrain as terrains
+from revolve2.core.physics import Terrain
 
 class Optimizer(EAOptimizer[Genotype, float]):
     """
@@ -68,6 +61,10 @@ class Optimizer(EAOptimizer[Genotype, float]):
     _grid_size: int
     _num_potential_joints: int
 
+    _env_change_freq: int
+    _terrain: Terrain
+    _current_terrain: str
+
     async def ainit_new(  # type: ignore # TODO for now ignoring mypy complaint about LSP problem, override parent's ainit
         self,
         database: AsyncEngine,
@@ -82,7 +79,9 @@ class Optimizer(EAOptimizer[Genotype, float]):
         control_frequency: float,
         num_generations: int,
         offspring_size: int,
-        grid_size: int
+        grid_size: int,
+        environment: str,
+        change_frequency: int
     ) -> None:
         """
         Initialize this class async.
@@ -125,6 +124,15 @@ class Optimizer(EAOptimizer[Genotype, float]):
         self._num_generations = num_generations
         self._grid_size = grid_size
         self._num_potential_joints = ((grid_size**2)-1)
+        self._env_change_freq = change_frequency
+        self._current_terrain = environment.upper()
+        if environment.upper() == "FLAT":
+            self._terrain = terrains.flat_plane()
+        elif environment.upper() == "RUGGED":
+            self._terrain = terrains.rugged_plane()
+        else:
+            raise ValueError("The environment must be of type flat or rugged")
+            
 
         # create database structure if not exists
         # TODO this works but there is probably a better way
@@ -146,7 +154,9 @@ class Optimizer(EAOptimizer[Genotype, float]):
         control_frequency: float,
         num_generations: int,
         offspring_size: int,
-        grid_size: int
+        grid_size: int,
+        environment: str,
+        change_frequency: int
     ) -> bool:
         """
         Try to initialize this class async from a database.
@@ -212,6 +222,14 @@ class Optimizer(EAOptimizer[Genotype, float]):
         self._control_frequency = control_frequency
         self._num_generations = num_generations
         self._grid_size = grid_size
+        self._env_change_freq = change_frequency
+        self._current_terrain = environment.upper()
+        if environment.upper() == "FLAT":
+            self._terrain = terrains.flat_plane()
+        elif environment.upper() == "RUGGED":
+            self._terrain = terrains.rugged_plane()
+        else:
+            raise ValueError("The environment must be of type flat or rugged")
 
         return True
 
@@ -255,8 +273,8 @@ class Optimizer(EAOptimizer[Genotype, float]):
     async def _evaluate_generation(
         self,
         genotypes: List[Genotype],
-        database: AsyncEngine,
-        db_id: DbId,
+        old_genotypes: List[Genotype],
+        num_generation: int
     ) -> Tuple[List[float], List[Genotype]]:
 
         final_fitnesses = []
@@ -266,7 +284,27 @@ class Optimizer(EAOptimizer[Genotype, float]):
 
         body_genotypes = [genotype.body for genotype in genotypes]
         brain_genotypes = [genotype.brain for genotype in genotypes]
+        
+        # update terrain if the environment is dynamic
+        if num_generation > 0 and self._env_change_freq > 0:
+            gen_before_change = math.ceil((self._num_generations + 1) / (self._env_change_freq + 1))
+            if num_generation % gen_before_change == 0:
+                if self._current_terrain == "FLAT":
+                    self._terrain = terrains.rugged_plane()
+                    self._current_terrain = "RUGGED"
+                    logging.info('new terrain: RUGGED')
+                elif self._current_terrain == "RUGGED":             
+                    self._terrain = terrains.flat_plane()
+                    self._current_terrain = "FLAT"
+                    logging.info('new terrain = FLAT')
 
+                # add the old individuals to the ones that are going to be evaluated so they are evaluated on the new environment
+                old_body_genotypes = [genotype.body for genotype in old_genotypes]
+                old_brain_genotypes = [genotype.brain for genotype in old_genotypes]
+                body_genotypes = body_genotypes + old_body_genotypes
+                brain_genotypes = brain_genotypes + old_brain_genotypes
+
+        # the new genotypes go through the learning phase before being evaluated
         for body_num, (body_genotype, brain_genotype) in enumerate(zip(body_genotypes, brain_genotypes)):
             body = body_develop(body_genotype)
             _, dof_ids = body.to_actor()
@@ -307,7 +345,7 @@ class Optimizer(EAOptimizer[Genotype, float]):
             if len(body.find_active_hinges()) <= 0:
                 logging.info("Morphology num " + str(body_num) + " has no active hinges")
             else:
-                learned_params, final_fitness, starting_fitness = await learn_controller(body, brain_params, self.generation_index, body_num)
+                learned_params, final_fitness, starting_fitness = await learn_controller(body, brain_params, self._terrain)
                 for hinge, learned_weight in zip(active_hinges, learned_params[:len(active_hinges)]):
                     pos = body.grid_position(hinge)
                     cpg_idx = int(pos[0] + pos[1] * self._grid_size + self._grid_size**2 / 2)
@@ -389,7 +427,7 @@ class DbOptimizerState(DbBase):
     control_frequency = sqlalchemy.Column(sqlalchemy.Float, nullable=False)
     num_generations = sqlalchemy.Column(sqlalchemy.Integer, nullable=False)
 
-def relative_pos(pos1, pos2):
+def relative_pos(pos1, pos2) -> int:
     dx = pos2[0] - pos1[0]
     dy = pos2[1] - pos1[1]
 

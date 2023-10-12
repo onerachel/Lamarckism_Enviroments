@@ -1,5 +1,5 @@
-# Investigate Lamarckism in different enviroments
-We tested Lamarckism in three different environments in real world and in a mujoco based wrapper called Revolve2. The release version of Revolve2 used in this project is v0.3.8-beta1 (https://github.com/ci-group/revolve2/releases/tag/v0.3.8-beta1).
+# Investigate Lamarckism in the changing environments
+We tested Lamarckism both in the real world and in a mujoco based wrapper called Revolve2. The release version of Revolve2 used in this project is v0.3.8-beta1 (https://github.com/ci-group/revolve2/releases/tag/v0.3.8-beta1).
 
 Parameters used in the experiments are:
 ``` 

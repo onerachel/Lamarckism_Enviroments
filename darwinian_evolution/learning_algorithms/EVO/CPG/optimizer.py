@@ -19,8 +19,7 @@ from revolve2.core.physics.running import (ActorState, Batch,
 from .runner_mujoco import LocalRunner
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio.session import AsyncSession
-from revolve2.standard_resources import terrains
-import learning_algorithms.EVO.CPG.terrain as terrains
+from revolve2.core.physics import Terrain
 
 class Optimizer(RevDEOptimizer):
     """
@@ -28,8 +27,6 @@ class Optimizer(RevDEOptimizer):
 
     Uses the generic EA optimizer as a base.
     """
-
-    _TERRAIN = terrains.mixed_track()
 
     _body: Body
     _actor: Actor
@@ -44,6 +41,8 @@ class Optimizer(RevDEOptimizer):
 
     _num_generations: int
     _target_points: List[Tuple[float]]
+
+    _terrain: Terrain
 
     async def ainit_new(  # type: ignore # TODO for now ignoring mypy complaint about LSP problem, override parent's ainit
         self,
@@ -60,6 +59,7 @@ class Optimizer(RevDEOptimizer):
         num_generations: int,
         scaling: float,
         cross_prob: float,
+        terrain: Terrain
     ) -> None:
         """
         Initialize this class async.
@@ -95,13 +95,12 @@ class Optimizer(RevDEOptimizer):
             cross_prob=cross_prob,
         )
 
-        self._runner = self._init_runner()
-
         self._simulation_time = simulation_time
         self._sampling_frequency = sampling_frequency
         self._control_frequency = control_frequency
         self._num_generations = num_generations
-        self._target_points = [(0.5, -0.8), (-0.3, -0.8), (-0.3, 0.0), (0.5, 0.0)]
+        self._target_points = [(1, -1), (0, -2)]
+        self._terrain = terrain
 
     async def ainit_from_database(  # type: ignore # see comment at ainit_new
         self,
@@ -142,8 +141,6 @@ class Optimizer(RevDEOptimizer):
         self._body = robot_body
         self._init_actor_and_cpg_network_structure()
 
-        self._runner = self._init_runner()
-
         self._simulation_time = simulation_time
         self._sampling_frequency = sampling_frequency
         self._control_frequency = control_frequency
@@ -164,7 +161,7 @@ class Optimizer(RevDEOptimizer):
         self._cpg_network_structure = cpg_network_structure
 
     def _init_runner(self, num_simulators: int = 1) -> None:
-        return LocalRunner(headless=True, num_simulators=num_simulators)
+        return LocalRunner(headless=True, num_simulators=num_simulators, target_points=self._target_points)
 
     async def _evaluate_population(
         self,
@@ -198,13 +195,13 @@ class Optimizer(RevDEOptimizer):
 
             bounding_box = self._actor.calc_aabb()
             env = Environment(EnvironmentActorController(controller, self._target_points, steer=True))
-            env.static_geometries.extend(self._TERRAIN.static_geometry)
+            env.static_geometries.extend(self._terrain.static_geometry)
             env.actors.append(
                 PosedActor(
                     self._actor,
                     Vector3(
                         [
-                            0.5,
+                            0.0,
                             0.0,
                             bounding_box.size.z / 2.0 - bounding_box.offset.z,
                         ]

@@ -18,17 +18,14 @@ from genotype import DbGenotype, GenotypeSerializer, Genotype
 from revolve2.core.database.serializers import FloatSerializer
 from array_genotype.array_genotype import ArrayGenotypeSerializer as BrainSerializer, develop as brain_develop
 from revolve2.genotypes.cppnwin.modular_robot.body_genotype_v1 import develop_v1 as body_develop
-from revolve2.genotypes.cppnwin._genotype import GenotypeSerializer as BodySerializer
-from revolve2.actor_controllers.cpg import CpgNetworkStructure, Cpg
-from revolve2.standard_resources import terrains
+import learning_algorithms.EVO.CPG.terrain as terrains
 from typing import Optional
 import argparse
-from learning_algorithms.EVO.CPG.terrain import rugged_track as track_terrain
 
 async def main(record_dir: Optional[str], record: bool = False) -> None:
 
     """Run the script."""
-    db = open_async_database_sqlite('newenv_data/lamarckian/run2/')
+    db = open_async_database_sqlite('lamarc_asex_database')
     async with AsyncSession(db) as session:
         individuals = (
             (
@@ -115,7 +112,7 @@ async def main(record_dir: Optional[str], record: bool = False) -> None:
         bot = ModularRobot(body, brain)
 
     rerunner = ModularRobotRerunner()
-    await rerunner.rerun(bot, 5, track_terrain(), record_dir, record)
+    await rerunner.rerun(bot, 5, terrains.rugged_plane(), record_dir, record)
 
 def relative_pos(pos1, pos2):
     dx = pos2[0] - pos1[0]
