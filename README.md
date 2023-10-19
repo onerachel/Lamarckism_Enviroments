@@ -32,9 +32,9 @@ To show the simulation, add --visualize:
 ``` 
 python optimize.py --visualize
 ``` 
-To restart from the last optimization checkpoint, add --from_checkpoint: 
+To restart from the last optimization checkpoint, simply rerun: 
 ``` 
-python optimize.py --from_checkpoint
+python optimize.py
 ``` 
 To plot fitness:
 ``` 
