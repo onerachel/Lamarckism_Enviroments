@@ -1,10 +1,10 @@
-# Investigate Lamarckism in the changing environments
-We tested Lamarckism both in the real world and in a mujoco based wrapper called Revolve2. The release version of Revolve2 used in this project is v0.3.8-beta1 (https://github.com/ci-group/revolve2/releases/tag/v0.3.8-beta1).
+# Lamarckian Inheritance Improves Robot Evolution in Dynamic Environments
+We tested the Lamarckian system both in the real world and in a MuJoCo-based wrapper called Revolve2. The release version of Revolve2 used in this project is v0.3.8-beta1, available at https://github.com/ci-group/revolve2/releases/tag/v0.3.8-beta1. The setup for the physical experiments can be found here: https://github.com/onerachel/physical_robot_experiments.
 
 Parameters used in the experiments are:
 ``` 
 ENVIRONMENT = "FLAT" or "RUGGED" # type of environment
-CHANGE_FREQUENCY = 0 or 2 or 5 # environment changing frequency in an evoulutionary run
+CHANGE_FREQUENCY = 0 or 2 or 5   # frequency of environmental changes during an evolutionary run
 pop_size=50,
 offspring_size=25,
 nr_generations=30,
@@ -49,8 +49,7 @@ To check the best robot wrt the fitness and save the video:
 python rerun_best.py -r <OUTPUT-DIR>
 ```
 
-## Examples
-
+## Highlighted results
 
 ## Documentation 
 
